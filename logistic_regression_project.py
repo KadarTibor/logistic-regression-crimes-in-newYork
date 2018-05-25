@@ -1,6 +1,8 @@
 import numpy as np  # linear algebra
 import pandas as pd  # data processing, CSV file I/O (e.g. pd.read_csv)
 from sklearn import linear_model
+from sklearn import metrics
+
 
 def get_month(date):
     tokens = str(date).split('/')
@@ -17,6 +19,30 @@ def process_time(time):
         return 'after_noon'
     if int(tokens[0]) <= 24:
         return 'evening'
+
+
+def compute_labels(offense_name):
+    offense_name = str(offense_name)
+    if offense_name == 'MURDER & NON-NEGL. MANSLAUGHTER':
+        return 1
+    if offense_name == 'HOMICIDE-NEGLIGENT,UNCLASSIFIED':
+        return 1
+    if offense_name == 'ASSAULT 3 & RELATED OFFENSES':
+        return 1
+    if offense_name == 'ROBBERY':
+        return 1
+    if offense_name == 'RAPE':
+        return 1
+    return 0
+
+
+def calc_pozitive_negative_ratio(data):
+    good = data[(data.Labels == 1)]
+    nr_good= len(good)
+    print('murders: %d' % nr_good)
+    print('all_crimes: %d' % len(data.Labels))
+
+    print('Percentage: %f' % ((nr_good / (len(data.Labels))) * 100))
 
 
 # Load the file containing the crimes in new york data
@@ -40,18 +66,12 @@ date = date.apply(lambda x: get_month(x))
 time = dataset.CMPLNT_FR_TM
 time = time.fillna('22:00:00')
 time = time.apply(lambda x: process_time(x))
-# print(time)
 
 features.CMPLNT_FR_DT = date
 features.CMPLNT_FR_TM = time
 
-print(features)
-
-labels = np.where((features.OFNS_DESC == 'MURDER & NON-NEGL. MANSLAUGHTER') |
-                  (dataset.OFNS_DESC == 'HOMICIDE-NEGLIGENT,UNCLASSIFIE') |
-                  (dataset.OFNS_DESC == 'ASSAULT 3 & RELATED OFFENSES'), 1, 0)
-
-print(labels)
+labels = pd.DataFrame()
+labels['Labels'] = dataset.OFNS_DESC.apply(lambda x: compute_labels(x))
 
 # encode the data (we have strings as labels want numerical values)
 
@@ -69,21 +89,48 @@ features = features.join(one_hot_time_of_day)
 features = features.join(one_hot_offense_description)
 features = features.join(one_hot_borough)
 
-# transform the labels into a dataframe to join with the dataset pre split
-labels = pd.DataFrame(labels.reshape(len(labels), 1), ["LABL"])
-
+# add the labels to the data frame
 features = features.join(labels)
 
+# since the data set contains more negative examples than positive
+# we need to balance this out
+positive_data = features[features.Labels == 1]
+negative_data = features[features.Labels == 0]
+
+# choose randomly negative data
+negative_data = negative_data.sample(n=len(positive_data))
+
+features = pd.concat([positive_data, negative_data])
 # split the dataset into train validation and test sets
 # randomly shuffle the dataframe
 features = features.reindex(np.random.permutation(features.index))
 # split the data set into train validate and test sets 60% 20% 20%
 train, validate, test = np.split(features.sample(frac=1), [int(.6*len(features)), int(.8*len(features))])
 
-print(train)
-
+# compute the pozitive and negative examples ratio
+print('All the dataset')
+calc_pozitive_negative_ratio(features)
+print('Train dataset')
+calc_pozitive_negative_ratio(train)
+print('Validation dataset')
+calc_pozitive_negative_ratio(validate)
+print('Test dataset')
+calc_pozitive_negative_ratio(test)
 # apply the learning algorithm on the data set
-# clf = linear_model.LogisticRegression(C=1e5)
-# clf.fit(features, labels)
+clf = linear_model.LogisticRegression(C=0.0001)
+clf.fit(train.loc[:, train.columns != 'Labels'], train.Labels)
+
+score = clf.score(validate.loc[:, validate.columns != 'Labels'], validate.Labels)
+print("score on validate set")
+print(score)
+
+score = clf.score(test.loc[:, test.columns != 'Labels'], test.Labels)
+print("score on test set")
+print(score)
+
+
+
+
+
 
 
