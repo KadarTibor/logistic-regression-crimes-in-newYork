@@ -1,7 +1,78 @@
 import numpy as np  # linear algebra
 import pandas as pd  # data processing, CSV file I/O (e.g. pd.read_csv)
 from sklearn import linear_model
+import matplotlib.pyplot as plt
+from sklearn.model_selection import learning_curve
 from sklearn import metrics
+
+def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None,
+                        n_jobs=1, train_sizes=np.linspace(.1, 1.0, 5)):
+    """
+    Generate a simple plot of the test and training learning curve.
+
+    Parameters
+    ----------
+    estimator : object type that implements the "fit" and "predict" methods
+        An object of that type which is cloned for each validation.
+
+    title : string
+        Title for the chart.
+
+    X : array-like, shape (n_samples, n_features)
+        Training vector, where n_samples is the number of samples and
+        n_features is the number of features.
+
+    y : array-like, shape (n_samples) or (n_samples, n_features), optional
+        Target relative to X for classification or regression;
+        None for unsupervised learning.
+
+    ylim : tuple, shape (ymin, ymax), optional
+        Defines minimum and maximum yvalues plotted.
+
+    cv : int, cross-validation generator or an iterable, optional
+        Determines the cross-validation splitting strategy.
+        Possible inputs for cv are:
+          - None, to use the default 3-fold cross-validation,
+          - integer, to specify the number of folds.
+          - An object to be used as a cross-validation generator.
+          - An iterable yielding train/test splits.
+
+        For integer/None inputs, if ``y`` is binary or multiclass,
+        :class:`StratifiedKFold` used. If the estimator is not a classifier
+        or if ``y`` is neither binary nor multiclass, :class:`KFold` is used.
+
+        Refer :ref:`User Guide <cross_validation>` for the various
+        cross-validators that can be used here.
+
+    n_jobs : integer, optional
+        Number of jobs to run in parallel (default 1).
+    """
+    plt.figure()
+    plt.title(title)
+    if ylim is not None:
+        plt.ylim(*ylim)
+    plt.xlabel("Training examples")
+    plt.ylabel("Score")
+    train_sizes, train_scores, test_scores = learning_curve(
+        estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes)
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+    plt.grid()
+
+    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
+                     train_scores_mean + train_scores_std, alpha=0.1,
+                     color="r")
+    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
+                     test_scores_mean + test_scores_std, alpha=0.1, color="g")
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+             label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+             label="Cross-validation score")
+
+    plt.legend(loc="best")
+    return plt
 
 
 def get_month(date):
@@ -45,6 +116,10 @@ def calc_pozitive_negative_ratio(data):
     print('Percentage: %f' % ((nr_good / (len(data.Labels))) * 100))
 
 
+def convert_coord(coord):
+    lg = float(str(coord))
+    return lg
+
 # Load the file containing the crimes in new york data
 dataset = pd.read_csv("crimes-new-york-city/NYPD_Complaint_Data_Historic.csv", low_memory=False)
 
@@ -80,13 +155,15 @@ one_hot_time_of_day = pd.get_dummies(features.CMPLNT_FR_TM)
 one_hot_offense_description = pd.get_dummies(features.OFNS_DESC)
 one_hot_borough = pd.get_dummies(features.BORO_NM)
 
+
 features.drop('CMPLNT_FR_DT', axis=1, inplace=True)
 features.drop('CMPLNT_FR_TM', axis=1, inplace=True)
 features.drop('OFNS_DESC', axis=1, inplace=True)
 features.drop('BORO_NM', axis=1, inplace=True)
 features = features.join(one_hot_date)
 features = features.join(one_hot_time_of_day)
-features = features.join(one_hot_offense_description)
+# this should not be added since this is the feature out of which the label is extracted
+# features = features.join(one_hot_offense_description)
 features = features.join(one_hot_borough)
 
 # add the labels to the data frame
@@ -117,7 +194,7 @@ calc_pozitive_negative_ratio(validate)
 print('Test dataset')
 calc_pozitive_negative_ratio(test)
 # apply the learning algorithm on the data set
-clf = linear_model.LogisticRegression(C=0.0001)
+clf = linear_model.LogisticRegression(C=0.1)
 clf.fit(train.loc[:, train.columns != 'Labels'], train.Labels)
 
 score = clf.score(validate.loc[:, validate.columns != 'Labels'], validate.Labels)
@@ -129,6 +206,9 @@ print("score on test set")
 print(score)
 
 
+plot_learning_curve(clf, 'Logistic Regression', train.loc[:, train.columns != 'Labels'],
+                    train.Labels, n_jobs=4)
+plt.show()
 
 
 
